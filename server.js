@@ -70,7 +70,7 @@ async function readBetterDisplayModes() {
 async function readDisplayModes() {
   if (DISPLAY_BACKEND === 'betterdisplay') return readBetterDisplayModes();
   const presets = await virtualPresets();
-  return presets.filter(preset => preset.current).map(preset => ({
+  return presets.map(preset => ({
     presetID: preset.id,
     resolution: `${Math.round(preset.width / 2)}x${Math.round(preset.height / 2)}`,
     physicalResolution: `${preset.width}x${preset.height}`,
@@ -170,7 +170,6 @@ async function stopCapture() {
 async function configureDisplay(settings) {
   const { connected, resolution } = settings;
   if (connected !== undefined && typeof connected !== 'boolean') throw new Error('connected must be a boolean');
-  if (resolution !== undefined && !RESOLUTIONS.includes(resolution)) throw new Error('Unsupported resolution');
   if (resolution === undefined && connected === undefined) throw new Error('No display setting provided');
   if (connected === false) {
     await stopCapture();
@@ -187,9 +186,9 @@ async function configureDisplay(settings) {
   }
 
   let display = await refreshDisplay();
-  if (!display && connected === true) display = await ensureDisplay();
+  if ((!display || !display.connected) && connected === true) display = await ensureDisplay();
   if (!display) throw new Error(`${DISPLAY_NAME} virtual display not found`);
-  const wasConnected = Boolean(display.displayID && display.displayID !== '0');
+  const wasConnected = Boolean(display.connected);
   const shouldCapture = Boolean(active?.authenticated && wasConnected);
   await stopCapture();
   try {
@@ -281,7 +280,13 @@ function json(res, value, status = 200) {
 const requestHandler = async (req, res) => {
   if (req.url === '/api/status') {
     if (!virtualDisplay) await refreshDisplay().catch(() => {});
-    return json(res, { code, backend: DISPLAY_BACKEND, connected: !!active, device: active?.device ?? null, droppedFrames: active?.droppedFrames ?? 0, virtualDisplay, resolutions: DISPLAY_BACKEND === 'virtualdisplay' ? (await readDisplayModes().then(modes => modes.map(mode => mode.resolution)).catch(() => [])) : RESOLUTIONS });
+    let resolutions = RESOLUTIONS;
+    let backendError = null;
+    if (DISPLAY_BACKEND === 'virtualdisplay') {
+      try { resolutions = (await readDisplayModes()).map(mode => mode.resolution); }
+      catch (error) { resolutions = []; backendError = error.message; }
+    }
+    return json(res, { code, backend: DISPLAY_BACKEND, backendError, connected: !!active, device: active?.device ?? null, droppedFrames: active?.droppedFrames ?? 0, virtualDisplay, resolutions });
   }
   if (req.url === '/api/display' && req.method === 'POST') {
     try {
