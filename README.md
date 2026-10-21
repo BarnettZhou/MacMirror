@@ -24,7 +24,7 @@ npm start
 DISPLAY_BACKEND=virtualdisplay npm start
 ```
 
-VirtualDisplay 后端默认查找 `/Applications/VirtualDisplay.app/Contents/MacOS/vdctl`，也可以通过 `VIRTUAL_DISPLAY_CTL=/path/to/vdctl` 指定路径。它复用名为 `VirtualDisplay` 的虚拟屏；如果不存在，则创建这一块屏。它不会创建或修改 BetterDisplay 的 `LANMirror`。两种后端对网页端使用相同的配对、采集和管理接口。
+VirtualDisplay 后端优先查找 `/Applications/VirtualDisplay.app/Contents/MacOS/vdctl`，并兼容本机技术验证构建路径 `/tmp/VirtualDisplay-derived-app/Build/Products/Debug/VirtualDisplay.app/Contents/MacOS/vdctl`。其他位置可通过 `VIRTUAL_DISPLAY_CTL=/path/to/vdctl` 指定。它复用名为 `VirtualDisplay` 的虚拟屏；如果不存在，则创建这一块屏。它不会创建或修改 BetterDisplay 的 `LANMirror`。两种后端对网页端使用相同的配对、采集和管理接口。
 
 VirtualDisplay 当前只向管理页报告其 `vdctl` 标记为当前的分辨率。技术验证中，切换到其他预设后 macOS 实际模式未改变，因此其他分辨率暂不作为可选项。
 

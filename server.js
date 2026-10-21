@@ -2,6 +2,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { execFile } from 'node:child_process';
 import { randomInt } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -13,7 +14,13 @@ const HTTPS_KEY = process.env.HTTPS_KEY;
 const HTTPS_CERT = process.env.HTTPS_CERT;
 const DISPLAY_BACKEND = String(process.env.DISPLAY_BACKEND || 'betterdisplay').toLowerCase();
 const BETTER_DISPLAY = process.env.BETTER_DISPLAY || '/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay';
-const VIRTUAL_DISPLAY_CTL = process.env.VIRTUAL_DISPLAY_CTL || '/Applications/VirtualDisplay.app/Contents/MacOS/vdctl';
+const VIRTUAL_DISPLAY_CTL_CANDIDATES = [
+  '/Applications/VirtualDisplay.app/Contents/MacOS/vdctl',
+  '/tmp/VirtualDisplay-derived-app/Build/Products/Debug/VirtualDisplay.app/Contents/MacOS/vdctl',
+];
+const VIRTUAL_DISPLAY_CTL = process.env.VIRTUAL_DISPLAY_CTL
+  || VIRTUAL_DISPLAY_CTL_CANDIDATES.find(existsSync)
+  || VIRTUAL_DISPLAY_CTL_CANDIDATES[0];
 const DISPLAY_NAME = DISPLAY_BACKEND === 'virtualdisplay' ? 'VirtualDisplay' : 'LANMirror';
 if (!['betterdisplay', 'virtualdisplay'].includes(DISPLAY_BACKEND)) {
   throw new Error(`Unsupported DISPLAY_BACKEND: ${DISPLAY_BACKEND}. Use betterdisplay or virtualdisplay.`);
@@ -29,7 +36,12 @@ function runFile(file, args, options = {}) {
   return new Promise((resolve, reject) => execFile(file, args, { timeout: 15_000, ...options }, (error, stdout, stderr) =>
     error ? reject(new Error((stderr || stdout || error.message).trim())) : resolve(stdout)));
 }
-function vd(args) { return runFile(VIRTUAL_DISPLAY_CTL, args); }
+function vd(args) {
+  if (!existsSync(VIRTUAL_DISPLAY_CTL)) {
+    return Promise.reject(new Error(`vdctl not found at ${VIRTUAL_DISPLAY_CTL}; install VirtualDisplay.app or set VIRTUAL_DISPLAY_CTL to its vdctl path`));
+  }
+  return runFile(VIRTUAL_DISPLAY_CTL, args);
+}
 function bd(args) {
   return new Promise((resolve, reject) => execFile(BETTER_DISPLAY, args, { timeout: 10_000 }, (error, stdout, stderr) =>
     error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
