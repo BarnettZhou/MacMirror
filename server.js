@@ -82,12 +82,12 @@ async function readBetterDisplayModes() {
 async function readDisplayModes() {
   if (DISPLAY_BACKEND === 'betterdisplay') return readBetterDisplayModes();
   const presets = await virtualPresets();
-  return presets.map(preset => ({
+  return presets.filter(preset => preset.current).map(preset => ({
     presetID: preset.id,
     resolution: `${Math.round(preset.width / 2)}x${Math.round(preset.height / 2)}`,
     physicalResolution: `${preset.width}x${preset.height}`,
     hiDPI: true,
-    current: Boolean(preset.current),
+    current: true,
     refreshRate: preset.refreshRate,
   }));
 }
