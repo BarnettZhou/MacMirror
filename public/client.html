@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>LAN Mirror</title>
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;color:#eee;font:16px system-ui,sans-serif}
+#join{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#111}
+#join[hidden]{display:none}
+#join h1{margin:0 0 8px}
+#join input,#join button{font:inherit;padding:12px 16px}
+#error{max-width:min(90vw,600px);margin:0;color:#ff8d8d;text-align:center;overflow-wrap:anywhere}
+#screen{position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none}
+#display{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#000;object-fit:fill}
+#display[hidden]{display:none}
+#conn-status{position:fixed;left:50%;top:16px;transform:translateX(-50%);margin:0;padding:8px 14px;background:#222d;color:#ffd166;font-size:13px;border-radius:999px;pointer-events:none}
+#conn-status[hidden]{display:none}
+#wake-status{position:fixed;right:12px;bottom:10px;margin:0;padding:5px 8px;background:#222b;color:#ddd;font-size:12px;pointer-events:none}
+#wake-status[hidden]{display:none}
+</style>
+</head>
+<body>
+<section id="join"><h1>LAN Mirror</h1><input id="code" inputmode="numeric" maxlength="4" placeholder="四位认证码" aria-label="四位认证码"><button id="connect">连接</button><p id="error" role="status"></p></section>
+<canvas id="screen" width="1920" height="1080"></canvas>
+<video id="display" autoplay muted playsinline hidden></video>
+<p id="conn-status" role="status" hidden></p>
+<p id="wake-status" role="status" hidden></p>
+<script>
+const canvas=document.querySelector('#screen'),video=document.querySelector('#display'),codeInput=document.querySelector('#code'),connectButton=document.querySelector('#connect'),joinPanel=document.querySelector('#join'),error=document.querySelector('#error'),connStatus=document.querySelector('#conn-status'),wakeStatus=document.querySelector('#wake-status'),ctx=canvas.getContext('2d');
+const CODE_KEY='lan-mirror-code';
+let wakeLock=null,displayStream=null,wakeStatusTimer=null;
+let pendingFrame=null,decodingFrame=false;
+let ws=null,reconnectTimer=null,reconnectDelay=1000,takenOver=false,manualAuth=false;
+codeInput.value=localStorage.getItem(CODE_KEY)||'';
+function showWakeStatus(message){
+ clearTimeout(wakeStatusTimer);
+ wakeStatus.textContent=message;
+ wakeStatus.hidden=false;
+ wakeStatusTimer=setTimeout(()=>{wakeStatus.hidden=true},4000);
+}
+function showConnStatus(message){
+ if(message){connStatus.textContent=message;connStatus.hidden=false}
+ else connStatus.hidden=true;
+}
+async function drawLatestFrame(){
+ if(decodingFrame||!pendingFrame)return;
+ decodingFrame=true;
+ try{
+  while(pendingFrame){
+   const frame=pendingFrame;pendingFrame=null;
+   const bitmap=await createImageBitmap(frame);
+   if(pendingFrame){bitmap.close();continue;}
+   if(canvas.width!==bitmap.width||canvas.height!==bitmap.height){canvas.width=bitmap.width;canvas.height=bitmap.height}
+   ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+  }
+ }catch(error){console.error('Frame decode failed',error)}
+ finally{decodingFrame=false;if(pendingFrame)drawLatestFrame()}
+}
+async function requestWakeLock(){
+ if(document.visibilityState!=='visible')return;
+ if(!navigator.wakeLock){showWakeStatus(location.protocol==='https:'?'此浏览器不支持屏幕常亮锁':'当前为 HTTP，浏览器无法启用屏幕常亮；需使用受信任证书的 HTTPS');return;}
+ try{wakeLock=await navigator.wakeLock.request('screen');showWakeStatus('屏幕常亮已启用');wakeLock.addEventListener('release',()=>{wakeLock=null;if(joinPanel.hidden&&document.visibilityState==='visible')requestWakeLock()})}
+ catch(error){showWakeStatus(error.name==='NotAllowedError'?'浏览器或系统阻止了屏幕常亮':'无法启用屏幕常亮')}
+}
+function sendAuth(code){
+ if(ws?.readyState===1)ws.send(JSON.stringify({type:'auth',code}));
+}
+function scheduleReconnect(){
+ if(takenOver||reconnectTimer)return;
+ showConnStatus(`连接已断开，${Math.round(reconnectDelay/1000)} 秒后重连…`);
+ reconnectTimer=setTimeout(()=>{
+  reconnectTimer=null;
+  reconnectDelay=Math.min(reconnectDelay*1.5,5000);
+  connect();
+ },reconnectDelay);
+}
+function connect(){
+ takenOver=false;
+ ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/socket`);
+ ws.binaryType='blob';
+ ws.onopen=()=>{
+  const saved=localStorage.getItem(CODE_KEY);
+  if(saved&&!manualAuth)sendAuth(saved);
+  else joinPanel.hidden=false;
+ };
+ ws.onclose=event=>{
+  if(event.code===4001){
+   takenOver=true;
+   showConnStatus('');
+   joinPanel.hidden=false;
+   error.textContent='连接已被其他设备接管，请重新输入认证码连接';
+   return;
+  }
+  if(!joinPanel.hidden)return;
+  scheduleReconnect();
+ };
+ ws.onmessage=event=>{
+  if(typeof event.data!=='string'){pendingFrame=event.data;drawLatestFrame();return}
+  const message=JSON.parse(event.data);
+  if(message.type==='auth'&&!message.ok){
+   error.textContent='认证码错误，或已被其他设备占用';
+   joinPanel.hidden=false;
+   return;
+  }
+  if(message.type==='auth'&&message.ok){
+   if(!message.display){error.textContent=message.error||'虚拟屏不可用';scheduleReconnect();return;}
+   localStorage.setItem(CODE_KEY,codeInput.value);
+   manualAuth=false;
+   reconnectDelay=1000;
+   error.textContent='';
+   showConnStatus('');
+   joinPanel.hidden=true;
+   video.hidden=false;
+   if(!displayStream&&canvas.captureStream){displayStream=canvas.captureStream(30);video.srcObject=displayStream}
+   video.play().catch(()=>{});
+   requestWakeLock();
+   return;
+  }
+  if(message.type==='capture-error')error.textContent=`屏幕采集失败：${message.message}。请检查 macOS“隐私与安全性 > 屏幕与系统音频录制”权限并重启服务。`;
+ };
+}
+connectButton.onclick=()=>{manualAuth=true;localStorage.setItem(CODE_KEY,codeInput.value);sendAuth(codeInput.value)};
+codeInput.addEventListener('keydown',event=>{if(event.key==='Enter')connectButton.click()});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&joinPanel.hidden)requestWakeLock()});
+document.addEventListener('keydown',event=>{
+ if(event.key!=='Enter'||!joinPanel.hidden)return;
+ if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+ else document.documentElement.requestFullscreen().catch(()=>{});
+});
+connect();
+</script>
+</body>
+</html>

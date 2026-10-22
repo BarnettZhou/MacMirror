@@ -5,19 +5,118 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LAN Mirror 管理</title>
 <style>
-:root{font:16px system-ui,sans-serif;color:#222;background:#f4f5f7}*{box-sizing:border-box}body{max-width:720px;margin:0 auto;padding:32px 20px}section{background:#fff;border:1px solid #ddd;border-radius:8px;padding:20px;margin:16px 0}h1{margin:0 0 24px}h2{font-size:18px;margin:0 0 16px}code{font-size:2rem;letter-spacing:.3rem}label{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 0;border-bottom:1px solid #eee}label:last-of-type{border-bottom:0}select,button{font:inherit;padding:8px 12px}button{cursor:pointer}.status{color:#555}.error{color:#b42318;min-height:1.5em}
+:root{
+  color-scheme:dark;
+  --bg:#0b0d12;--card:rgba(255,255,255,.045);--border:rgba(255,255,255,.09);
+  --text:#e8eaf0;--muted:#8b91a3;--accent:#4f8cff;--accent-soft:rgba(79,140,255,.16);
+  --green:#34d399;--red:#f87171;--amber:#fbbf24;
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;color:var(--text);
+  background:
+    radial-gradient(900px 500px at 85% -10%,rgba(79,140,255,.14),transparent 60%),
+    radial-gradient(700px 500px at -10% 110%,rgba(52,211,153,.09),transparent 60%),
+    var(--bg);
+  display:flex;justify-content:center;padding:48px 20px;
+}
+main{width:100%;max-width:680px}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:28px}
+h1{margin:0;font-size:26px;font-weight:700;letter-spacing:.02em}
+.badge{font-size:12px;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(79,140,255,.3);border-radius:999px;padding:3px 10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;backdrop-filter:blur(12px);box-shadow:0 12px 32px rgba(0,0,0,.25)}
+.card h2{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin:0 0 18px}
+.pair{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.pair .label{color:var(--muted)}
+code.pin{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:2.4rem;font-weight:600;letter-spacing:.5rem;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(79,140,255,.25);border-radius:12px;padding:6px 18px 6px 26px}
+.statusline{display:flex;align-items:center;gap:10px;margin-top:16px;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:#5b6172;flex:none}
+.dot.on{background:var(--green);box-shadow:0 0 10px rgba(52,211,153,.8)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--border)}
+.row:last-of-type{border-bottom:0}
+.row .name{color:var(--text)}
+.row .desc{font-size:13px;color:var(--muted);margin-top:2px}
+select,button{font:inherit;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:9px 14px}
+select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{cursor:pointer;transition:background .15s,transform .05s}
+button:hover{background:rgba(255,255,255,.12)}
+button:active{transform:scale(.97)}
+button.danger{color:#ffb4b4;border-color:rgba(248,113,113,.35);background:rgba(248,113,113,.1)}
+button.danger:hover{background:rgba(248,113,113,.2)}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:13px;color:var(--muted);margin:14px 0 0}
+.message{min-height:1.5em;margin:12px 0 0;font-size:14px}
+.message.error{color:var(--red)}
+.message.ok{color:var(--green)}
+footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:8px}
 </style>
 </head>
 <body>
-<h1>LAN Mirror</h1>
-<section><h2>连接认证</h2><p>客户端认证码：<code id="code">----</code></p><p id="state" class="status">正在读取状态…</p><button id="disconnect" type="button">下线客户端</button></section>
-<section><h2>虚拟副屏</h2><label>启用虚拟屏幕 <input id="enabled" type="checkbox"></label><label>分辨率 <select id="resolution"></select></label><p class="status">较低分辨率会让副屏中的文字显得更大，但画面会更柔和。</p><p id="message" class="error" role="status"></p></section>
+<main>
+  <header><h1>LAN Mirror</h1><span class="badge" id="backend">…</span></header>
+  <section class="card">
+    <h2>连接认证</h2>
+    <div class="pair"><span class="label">客户端认证码</span><code class="pin" id="code">----</code></div>
+    <div class="statusline"><span class="dot" id="dot"></span><span id="state">正在读取状态…</span></div>
+    <div class="row" style="margin-top:14px"><div><div class="name">下线客户端</div><div class="desc">断开当前已连接的客户端</div></div><button id="disconnect" type="button" class="danger">断开连接</button></div>
+  </section>
+  <section class="card">
+    <h2>虚拟副屏</h2>
+    <div class="row">
+      <div><div class="name">分辨率</div><div class="desc">较低分辨率会让副屏中的文字显得更大，但画面会更柔和</div></div>
+      <select id="resolution"></select>
+    </div>
+    <div class="row">
+      <div><div class="name">传输画质</div><div class="desc">原画最清晰但带宽要求高；Wi-Fi 客户端卡顿或延迟大时建议降档</div></div>
+      <select id="quality">
+        <option value="original">原画（满像素）</option>
+        <option value="balanced">均衡（≤2560px）</option>
+        <option value="smooth">流畅（≤1920px）</option>
+      </select>
+    </div>
+    <p id="message" class="message" role="status"></p>
+  </section>
+  <footer>在其他设备上打开 <b>/client</b> 并输入认证码即可投屏</footer>
+</main>
 <script>
-const code=document.querySelector('#code'),state=document.querySelector('#state'),enabled=document.querySelector('#enabled'),resolution=document.querySelector('#resolution'),message=document.querySelector('#message'),disconnect=document.querySelector('#disconnect');
-let current=null,updating=false;
-async function refresh(){if(updating)return;const response=await fetch('/api/status');const status=await response.json();current=status;code.textContent=status.code;state.textContent=status.connected?`已连接：${status.device.address}`:'当前没有客户端连接';const values=status.resolutions||[];if([...resolution.options].map(option=>option.value).join(',')!==values.join(',')){resolution.replaceChildren(...values.map(value=>new Option(value,value)));}if(status.backendError)message.textContent=`后端读取失败：${status.backendError}`;const display=status.virtualDisplay;enabled.checked=Boolean(display?.connected);if(display?.resolution&&[...resolution.options].some(option=>option.value===display.resolution))resolution.value=display.resolution;}
-async function update(body){updating=true;message.textContent='正在应用…';try{const response=await fetch('/api/display',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const result=await response.json();if(!result.ok)throw new Error(result.error);message.textContent='已应用';await refresh();}catch(error){message.textContent=`应用失败：${error.message}`}finally{updating=false}}
-enabled.onchange=()=>update({connected:enabled.checked});resolution.onchange=()=>update({resolution:resolution.value});disconnect.onclick=async()=>{await fetch('/api/disconnect',{method:'POST'});refresh()};refresh();setInterval(refresh,2000);
+const code=document.querySelector('#code'),state=document.querySelector('#state'),dot=document.querySelector('#dot'),backend=document.querySelector('#backend'),resolution=document.querySelector('#resolution'),quality=document.querySelector('#quality'),message=document.querySelector('#message'),disconnect=document.querySelector('#disconnect');
+let updating=false;
+async function refresh(){
+  if(updating)return;
+  try{
+    const response=await fetch('/api/status');
+    const status=await response.json();
+    code.textContent=status.code;
+    backend.textContent=status.backend==='virtualdisplay'?'VirtualDisplay 后端':'BetterDisplay 后端';
+    dot.classList.toggle('on',Boolean(status.connected));
+    state.textContent=status.connected?`已连接：${status.device.address}`:'当前没有客户端连接';
+    const values=status.resolutions||[];
+    if([...resolution.options].map(option=>option.value).join(',')!==values.join(',')){
+      resolution.replaceChildren(...values.map(value=>new Option(value,value)));
+    }
+    if(status.backendError)setMessage(`后端读取失败：${status.backendError}`,'error');
+    const display=status.virtualDisplay;
+    if(display?.resolution&&[...resolution.options].some(option=>option.value===display.resolution))resolution.value=display.resolution;
+    if(status.streamQuality)quality.value=status.streamQuality;
+  }catch{state.textContent='无法连接服务端';dot.classList.remove('on')}
+}
+function setMessage(text,kind){message.textContent=text;message.className=`message ${kind||''}`}
+async function update(body){
+  updating=true;setMessage('正在应用…');
+  try{
+    const response=await fetch('/api/display',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const result=await response.json();
+    if(!result.ok)throw new Error(result.error);
+    setMessage('已应用','ok');
+    await refresh();
+  }catch(error){setMessage(`应用失败：${error.message}`,'error')}
+  finally{updating=false}
+}
+resolution.onchange=()=>update({resolution:resolution.value});
+quality.onchange=()=>update({quality:quality.value});
+disconnect.onclick=async()=>{await fetch('/api/disconnect',{method:'POST'});refresh()};
+refresh();setInterval(refresh,2000);
 </script>
 </body>
 </html>

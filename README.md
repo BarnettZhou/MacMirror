@@ -14,19 +14,21 @@ npm start
 
 在 Mac 浏览器打开 `http://localhost:8787` 管理页面；其它电脑打开 `http://<Mac局域网IP>:8787/client`，输入页面显示的四位码。
 
-显示后端可在启动时选择，默认使用 BetterDisplay：
+显示后端可在启动时选择，默认使用 VirtualDisplay：
 
 ```sh
-# 默认：BetterDisplay（需要开启 BetterDisplay CLI 集成）
+# 默认：VirtualDisplay（需要 VirtualDisplay.app 已安装）
 npm start
 
-# 技术验证后端：VirtualDisplay（需要 VirtualDisplay.app 已安装并运行）
-DISPLAY_BACKEND=virtualdisplay npm start
+# 备选：BetterDisplay（需要开启 BetterDisplay CLI 集成）
+DISPLAY_BACKEND=betterdisplay npm start
 ```
 
 VirtualDisplay 后端优先查找 `/Applications/VirtualDisplay.app/Contents/MacOS/vdctl`，并兼容本机技术验证构建路径 `/tmp/VirtualDisplay-derived-app/Build/Products/Debug/VirtualDisplay.app/Contents/MacOS/vdctl`。其他位置可通过 `VIRTUAL_DISPLAY_CTL=/path/to/vdctl` 指定。它复用名为 `VirtualDisplay` 的虚拟屏；如果不存在，则创建这一块屏。它不会创建或修改 BetterDisplay 的 `LANMirror`。两种后端对网页端使用相同的配对、采集和管理接口。
 
 VirtualDisplay 当前只向管理页报告其 `vdctl` 标记为当前的分辨率。技术验证中，切换到其他预设后 macOS 实际模式未改变，因此其他分辨率暂不作为可选项。
+
+注意：CGVirtualDisplay 创建后需要约 10 秒才会被 WindowServer 上线为扩展屏，管理页启用后请稍等。若 WindowServer 崩溃或重启，macOS 可能把崩溃时销毁的虚拟屏标识（vendor/product/serial）列入异常状态，之后相同标识的虚拟屏永远无法上线（表现为扩展屏完全失效：能采集但拖不动窗口）。恢复方法：在 `com.youngyunxing.VirtualDisplay` 配置中为该显示器换一组 `vendorID`/`productID`/`serialNumber`，再开关一次显示器。
 
 客户端常亮优先使用浏览器 Screen Wake Lock。该 API 要求安全上下文，局域网 HTTP 地址通常不满足；静音视频不能可靠阻止系统休眠。要启用客户端屏幕常亮，可为服务配置浏览器信任的 HTTPS 证书：
 
@@ -34,7 +36,9 @@ VirtualDisplay 当前只向管理页报告其 `vdctl` 标记为当前的分辨�
 HTTPS_KEY=/path/to/key.pem HTTPS_CERT=/path/to/cert.pem npm start
 ```
 
-然后客户端使用 `https://<Mac局域网IP>:8787/client`。证书必须包含该 IP/主机名并由客户端信任，否则浏览器仍可能禁用常亮锁。Mac 端在有客户端连接期间由 `caffeinate` 阻止系统闲置睡眠。
+然后客户端使用 `https://<Mac局域网IP>:8787/client`。证书必须包含该 IP/主机名并由客户端信任，否则浏览器仍可能禁用常亮锁。
+
+Mac 端**不做任何保活**：远程观看期间本机照常按系统设置的 `displaysleep` / `sleep` 息屏和睡眠，与平时无人操作时完全一致。早期版本会 spawn `caffeinate -dimsu`，且服务重启时不清子进程，一次重启就遗留一个永久持有 `PreventUserIdleDisplaySleep` 的孤儿进程，导致显示器永不熄屏——该逻辑已整体移除。
 
 首次运行需要在 macOS 隐私与安全性中允许 Screen Recording。BetterDisplay 的 CLI 集成功能也必须启用。
 
