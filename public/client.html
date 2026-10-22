@@ -3,26 +3,192 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="color-scheme" content="dark">
 <title>LAN Mirror</title>
 <style>
+:root{
+  color-scheme:dark;
+  --bg:#07080b;
+  --surface:#0d1016;
+  --line:rgba(255,255,255,.075);
+  --line-strong:rgba(255,255,255,.12);
+  --text:#e9edf5;
+  --muted:#8e97a8;
+  --faint:#7d8698;
+  --accent:#79aaff;
+  --accent-strong:#93beff;
+  --danger:#ff9f9f;
+  --radius-lg:24px;
+  --radius:14px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace;
+}
 *{box-sizing:border-box}
-html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;color:#eee;font:16px system-ui,sans-serif}
-#join{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#111}
-#join[hidden]{display:none}
-#join h1{margin:0 0 8px}
-#join input,#join button{font:inherit;padding:12px 16px}
-#error{max-width:min(90vw,600px);margin:0;color:#ff8d8d;text-align:center;overflow-wrap:anywhere}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;color:var(--text);font-family:var(--font)}
+button,input{font:inherit}
+[hidden]{display:none!important}
+
+#join{
+  position:fixed;inset:0;z-index:2;
+  display:grid;place-items:center;
+  padding:clamp(16px,4vw,48px);
+  overflow:auto;
+  background:
+    radial-gradient(1000px 620px at 12% -8%,rgba(121,170,255,.14),transparent 62%),
+    radial-gradient(760px 520px at 104% 108%,rgba(121,170,255,.06),transparent 60%),
+    linear-gradient(180deg,#080a0e,#06070a 70%);
+}
+
+.card{
+  position:relative;
+  width:min(900px,100%);
+  display:grid;
+  grid-template-columns:minmax(0,1.08fr) minmax(300px,.92fr);
+  border:1px solid var(--line);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  background:
+    linear-gradient(155deg,rgba(255,255,255,.05),rgba(255,255,255,.015) 42%,rgba(255,255,255,.01)),
+    var(--surface);
+  box-shadow:0 40px 120px -36px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:card-in .6s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes card-in{
+  from{opacity:0;transform:translateY(16px) scale(.99)}
+  to{opacity:1;transform:none}
+}
+
+.intro{
+  display:flex;flex-direction:column;
+  min-width:0;min-height:428px;
+  padding:clamp(28px,4vw,52px);
+}
+.brand{display:flex;align-items:center;gap:12px;color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.28em}
+.mark{position:relative;width:26px;height:19px;flex:none}
+.mark::before,.mark::after{content:"";position:absolute;border-radius:4px}
+.mark::before{inset:0 6px 6px 0;border:1px solid rgba(121,170,255,.85);background:linear-gradient(135deg,rgba(121,170,255,.24),transparent 70%)}
+.mark::after{inset:6px 0 0 6px;border:1px solid rgba(255,255,255,.26);background:rgba(7,8,11,.72)}
+
+h1{
+  margin:clamp(28px,5vw,46px) 0 0;
+  font-size:clamp(30px,4.1vw,42px);
+  line-height:1.22;
+  letter-spacing:-.02em;
+  font-weight:650;
+}
+h1 span{display:block}
+.lede{margin:18px 0 0;max-width:30ch;color:var(--muted);font-size:15px;line-height:1.8;text-wrap:pretty}
+.note{
+  margin:auto 0 0;padding-top:34px;
+  border-top:1px solid var(--line);
+  color:var(--faint);font-size:12.5px;line-height:1.6;
+  text-wrap:pretty;
+}
+
+.entry{
+  display:flex;flex-direction:column;justify-content:center;
+  min-width:0;
+  padding:clamp(24px,3.4vw,44px);
+  border-left:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(0,0,0,.24),rgba(0,0,0,.08));
+}
+.field{display:block;margin-bottom:10px;color:var(--muted);font-size:13px}
+#code{
+  width:100%;height:64px;padding:0 12px;
+  border:1px solid var(--line-strong);border-radius:var(--radius);
+  background:rgba(255,255,255,.035);color:var(--text);
+  font-family:var(--mono);font-size:30px;font-weight:500;
+  letter-spacing:.45em;text-indent:.22em;text-align:center;
+  font-variant-numeric:tabular-nums;caret-color:var(--accent);
+  transition:border-color .18s,box-shadow .18s,background .18s;
+}
+#code::placeholder{color:#7d8698}
+#code:hover{border-color:rgba(255,255,255,.18)}
+#code:focus{
+  outline:none;border-color:rgba(121,170,255,.65);
+  background:rgba(121,170,255,.06);
+  box-shadow:0 0 0 4px rgba(121,170,255,.12);
+}
+
+#connect{
+  margin-top:12px;height:50px;
+  border:0;border-radius:var(--radius);
+  background:linear-gradient(180deg,var(--accent-strong),var(--accent));
+  color:#07101f;font-size:15px;font-weight:650;letter-spacing:.02em;
+  cursor:pointer;
+  transition:transform .12s,filter .18s,opacity .18s;
+}
+#connect:hover{filter:brightness(1.06)}
+#connect:active{transform:translateY(1px)}
+#connect:focus-visible{outline:2px solid var(--accent-strong);outline-offset:3px}
+#connect:disabled{opacity:.62;cursor:default;transform:none;filter:none}
+
+.form-error{
+  min-height:20px;margin:12px 0 0;
+  color:var(--danger);font-size:13px;line-height:1.5;
+  overflow-wrap:anywhere;text-wrap:pretty;
+}
+.hint{margin:4px 0 0;color:var(--faint);font-size:12.5px;line-height:1.6;text-wrap:pretty}
+
 #screen{position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none}
 #display{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#000;object-fit:fill}
-#display[hidden]{display:none}
-#conn-status{position:fixed;left:50%;top:16px;transform:translateX(-50%);margin:0;padding:8px 14px;background:#222d;color:#ffd166;font-size:13px;border-radius:999px;pointer-events:none}
-#conn-status[hidden]{display:none}
-#wake-status{position:fixed;right:12px;bottom:10px;margin:0;padding:5px 8px;background:#222b;color:#ddd;font-size:12px;pointer-events:none}
-#wake-status[hidden]{display:none}
+
+#conn-status{
+  position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:5;
+  max-width:min(90vw,560px);margin:0;padding:9px 16px;
+  border:1px solid rgba(255,255,255,.1);border-radius:999px;
+  background:rgba(10,12,16,.78);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  color:#f5c96b;font-size:13px;line-height:1.4;text-align:center;
+  pointer-events:none;
+}
+#wake-status{
+  position:fixed;right:14px;bottom:12px;z-index:5;
+  max-width:min(90vw,520px);margin:0;padding:6px 10px;
+  border-radius:8px;background:rgba(10,12,16,.7);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  color:#aab2c1;font-size:12px;line-height:1.4;text-align:right;
+  pointer-events:none;
+}
+
+@media (max-width:720px){
+  .card{grid-template-columns:1fr;border-radius:20px}
+  .intro{min-height:0;padding:28px 24px 24px}
+  .note{margin-top:28px;padding-top:20px}
+  .entry{border-left:0;border-top:1px solid var(--line);padding:24px}
+  h1{font-size:clamp(27px,7.4vw,34px)}
+  #code{height:60px;font-size:27px}
+}
+@media (max-width:380px){
+  .intro{padding:24px 20px 20px}
+  .entry{padding:20px}
+  h1{font-size:25px}
+  #code{font-size:25px;letter-spacing:.35em;text-indent:.17em}
+}
+@media (prefers-reduced-motion:reduce){
+  .card{animation:none}
+  *{transition-duration:.01ms!important}
+}
 </style>
 </head>
 <body>
-<section id="join"><h1>LAN Mirror</h1><input id="code" inputmode="numeric" maxlength="4" placeholder="四位认证码" aria-label="四位认证码"><button id="connect">连接</button><p id="error" role="status"></p></section>
+<section id="join">
+  <main class="card">
+    <div class="intro">
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span>LAN Mirror</span></div>
+      <h1><span>把 Mac 的扩展屏</span><span>投到这台设备</span></h1>
+      <p class="lede">输入 Mac 管理页上的四位认证码，即可在这台设备上观看扩展屏。</p>
+      <p class="note">只读投屏，不回传键鼠。仅一台设备。</p>
+    </div>
+    <div class="entry">
+      <label class="field" for="code">四位认证码</label>
+      <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="0000" aria-label="四位认证码">
+      <button id="connect" type="button">连接</button>
+      <p id="error" class="form-error" role="status" aria-live="polite"></p>
+      <p class="hint">认证码在 Mac 管理页上显示，服务每次启动都会更新。</p>
+    </div>
+  </main>
+</section>
 <canvas id="screen" width="1920" height="1080"></canvas>
 <video id="display" autoplay muted playsinline hidden></video>
 <p id="conn-status" role="status" hidden></p>
@@ -32,8 +198,13 @@ const canvas=document.querySelector('#screen'),video=document.querySelector('#di
 const CODE_KEY='lan-mirror-code';
 let wakeLock=null,displayStream=null,wakeStatusTimer=null;
 let pendingFrame=null,decodingFrame=false;
-let ws=null,reconnectTimer=null,reconnectDelay=1000,takenOver=false,manualAuth=false;
+let ws=null,reconnectTimer=null,reconnectDelay=1000,takenOver=false;
 codeInput.value=localStorage.getItem(CODE_KEY)||'';
+function setBusy(busy){
+ connectButton.disabled=busy;
+ connectButton.textContent=busy?'正在连接…':'连接';
+ connectButton.setAttribute('aria-busy',busy?'true':'false');
+}
 function showWakeStatus(message){
  clearTimeout(wakeStatusTimer);
  wakeStatus.textContent=message;
@@ -82,15 +253,29 @@ function connect(){
  ws.binaryType='blob';
  ws.onopen=()=>{
   const saved=localStorage.getItem(CODE_KEY);
-  if(saved&&!manualAuth)sendAuth(saved);
-  else joinPanel.hidden=false;
+  if(saved){setBusy(true);sendAuth(saved)}
+  else{setBusy(false);joinPanel.hidden=false}
  };
  ws.onclose=event=>{
+  setBusy(false);
+  if(event.code===4000){
+   takenOver=false;
+   clearTimeout(reconnectTimer);reconnectTimer=null;reconnectDelay=1000;
+   showConnStatus('');
+   localStorage.removeItem(CODE_KEY);
+   codeInput.value='';
+   joinPanel.hidden=false;
+   error.textContent='管理端已断开连接，认证码已更新，请重新输入';
+   codeInput.focus();
+   return;
+  }
   if(event.code===4001){
    takenOver=true;
+   clearTimeout(reconnectTimer);reconnectTimer=null;
    showConnStatus('');
    joinPanel.hidden=false;
    error.textContent='连接已被其他设备接管，请重新输入认证码连接';
+   codeInput.focus();
    return;
   }
   if(!joinPanel.hidden)return;
@@ -100,14 +285,17 @@ function connect(){
   if(typeof event.data!=='string'){pendingFrame=event.data;drawLatestFrame();return}
   const message=JSON.parse(event.data);
   if(message.type==='auth'&&!message.ok){
+   setBusy(false);
+   localStorage.removeItem(CODE_KEY);
    error.textContent='认证码错误，或已被其他设备占用';
    joinPanel.hidden=false;
+   codeInput.focus();
    return;
   }
   if(message.type==='auth'&&message.ok){
+   setBusy(false);
    if(!message.display){error.textContent=message.error||'虚拟屏不可用';scheduleReconnect();return;}
    localStorage.setItem(CODE_KEY,codeInput.value);
-   manualAuth=false;
    reconnectDelay=1000;
    error.textContent='';
    showConnStatus('');
@@ -121,7 +309,24 @@ function connect(){
   if(message.type==='capture-error')error.textContent=`屏幕采集失败：${message.message}。请检查 macOS“隐私与安全性 > 屏幕与系统音频录制”权限并重启服务。`;
  };
 }
-connectButton.onclick=()=>{manualAuth=true;localStorage.setItem(CODE_KEY,codeInput.value);sendAuth(codeInput.value)};
+connectButton.onclick=()=>{
+ const value=codeInput.value.trim();
+ if(!/^\d{4}$/.test(value)){
+  error.textContent='请输入四位数字认证码';
+  codeInput.focus();
+  return;
+ }
+ localStorage.setItem(CODE_KEY,value);
+ error.textContent='';
+ setBusy(true);
+ if(ws?.readyState===1)sendAuth(value);
+ else connect();
+};
+codeInput.addEventListener('input',()=>{
+ const digits=codeInput.value.replace(/\D/g,'').slice(0,4);
+ if(codeInput.value!==digits)codeInput.value=digits;
+ if(error.textContent)error.textContent='';
+});
 codeInput.addEventListener('keydown',event=>{if(event.key==='Enter')connectButton.click()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&joinPanel.hidden)requestWakeLock()});
 document.addEventListener('keydown',event=>{

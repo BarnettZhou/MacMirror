@@ -59,7 +59,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:8px}
     <h2>连接认证</h2>
     <div class="pair"><span class="label">客户端认证码</span><code class="pin" id="code">----</code></div>
     <div class="statusline"><span class="dot" id="dot"></span><span id="state">正在读取状态…</span></div>
-    <div class="row" style="margin-top:14px"><div><div class="name">下线客户端</div><div class="desc">断开当前已连接的客户端</div></div><button id="disconnect" type="button" class="danger">断开连接</button></div>
+    <div class="row" style="margin-top:14px"><div><div class="name">下线客户端</div><div class="desc">断开当前客户端，并更新认证码</div></div><button id="disconnect" type="button" class="danger">断开连接</button></div>
   </section>
   <section class="card">
     <h2>虚拟副屏</h2>
@@ -115,7 +115,14 @@ async function update(body){
 }
 resolution.onchange=()=>update({resolution:resolution.value});
 quality.onchange=()=>update({quality:quality.value});
-disconnect.onclick=async()=>{await fetch('/api/disconnect',{method:'POST'});refresh()};
+disconnect.onclick=async()=>{
+  try{
+    const response=await fetch('/api/disconnect',{method:'POST'});
+    const result=await response.json();
+    if(result.code)code.textContent=result.code;
+  }catch{}
+  refresh();
+};
 refresh();setInterval(refresh,2000);
 </script>
 </body>

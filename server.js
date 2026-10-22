@@ -1,13 +1,13 @@
 import http from 'node:http';
 import https from 'node:https';
 import { execFile } from 'node:child_process';
-import { randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { createPairingCode } from './lib/pairing.js';
 
 const PORT = Number(process.env.PORT || 8787);
 const HTTPS_KEY = process.env.HTTPS_KEY;
@@ -27,7 +27,7 @@ const DISPLAY_NAME = DISPLAY_BACKEND === 'virtualdisplay' ? 'VirtualDisplay' : '
 if (!['betterdisplay', 'virtualdisplay'].includes(DISPLAY_BACKEND)) {
   throw new Error(`Unsupported DISPLAY_BACKEND: ${DISPLAY_BACKEND}. Use betterdisplay or virtualdisplay.`);
 }
-const code = String(randomInt(1000, 10000));
+let code = createPairingCode();
 const STREAM_QUALITIES = {
   original: { quality: '0.72', maxPixelWidth: '0' },
   balanced: { quality: '0.6', maxPixelWidth: '2560' },
@@ -389,8 +389,11 @@ const requestHandler = async (req, res) => {
       active.socket.close(4000, 'Disconnected by administrator');
       active = null;
       stopCapture();
+      // 断开后作废旧认证码，避免客户端用缓存码自动重连
+      code = createPairingCode(code);
+      console.log(`Pairing code rotated: ${code}`);
     }
-    return json(res, { ok: true });
+    return json(res, { ok: true, code });
   }
   const file = req.url === '/client' ? 'client.html' : 'admin.html';
   try { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(await readFile(new URL(`./public/${file}`, import.meta.url))); }

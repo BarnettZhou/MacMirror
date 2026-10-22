@@ -1,2 +1,17 @@
-import test from 'node:test'; import assert from 'node:assert/strict';
-test('pairing code is four digits', () => assert.match(String(Math.floor(1000 + Math.random() * 9000)), /^\d{4}$/));
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createPairingCode } from '../lib/pairing.js';
+
+test('pairing code is four digits', () => {
+  for (let i = 0; i < 100; i += 1) assert.match(createPairingCode(), /^\d{4}$/);
+});
+
+test('pairing code rotation avoids the previous code', () => {
+  let code = createPairingCode();
+  for (let i = 0; i < 100; i += 1) {
+    const next = createPairingCode(code);
+    assert.match(next, /^\d{4}$/);
+    assert.notEqual(next, code);
+    code = next;
+  }
+});
