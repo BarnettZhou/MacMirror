@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LAN Mirror 管理</title>
+<title>Mac Mirror 管理</title>
 <style>
 :root{
   color-scheme:dark;
@@ -54,7 +54,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:8px}
 </head>
 <body>
 <main>
-  <header><h1>LAN Mirror</h1><span class="badge" id="backend">…</span></header>
+  <header><h1>Mac Mirror</h1><span class="badge" id="backend">…</span></header>
   <section class="card">
     <h2>连接认证</h2>
     <div class="pair"><span class="label">客户端认证码</span><code class="pin" id="code">----</code></div>
@@ -88,7 +88,7 @@ async function refresh(){
     const response=await fetch('/api/status');
     const status=await response.json();
     code.textContent=status.code;
-    backend.textContent=status.backend==='virtualdisplay'?'VirtualDisplay 后端':'BetterDisplay 后端';
+    backend.textContent='VirtualDisplay 后端';
     dot.classList.toggle('on',Boolean(status.connected));
     state.textContent=status.connected?`已连接：${status.device.address}`:'当前没有客户端连接';
     const values=status.resolutions||[];

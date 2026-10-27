@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="color-scheme" content="dark">
-<title>LAN Mirror</title>
+<title>Mac Mirror</title>
 <style>
 :root{
   color-scheme:dark;
@@ -130,8 +130,10 @@ h1 span{display:block}
 }
 .hint{margin:4px 0 0;color:var(--faint);font-size:12.5px;line-height:1.6;text-wrap:pretty}
 
-#screen{position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none}
-#display{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#000;object-fit:fill}
+#screen{position:fixed;inset:0;width:100vw;height:100vh;display:block;background:#000}
+/* 保活占位视频：浏览器对"正在播放的可见 video"保持屏幕唤醒。判定只看布局可见性，
+   不查遮挡/透明度，所以 8px、近全透明即可；display:none 才会失效（关闭开关时用）。 */
+#keepalive{position:fixed;right:2px;bottom:2px;z-index:1;width:8px;height:8px;opacity:.01;pointer-events:none}
 
 #conn-status{
   position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:5;
@@ -143,13 +145,67 @@ h1 span{display:block}
   pointer-events:none;
 }
 #wake-status{
-  position:fixed;right:14px;bottom:12px;z-index:5;
+  position:fixed;left:14px;bottom:12px;z-index:5;
   max-width:min(90vw,520px);margin:0;padding:6px 10px;
   border-radius:8px;background:rgba(10,12,16,.7);
   -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-  color:#aab2c1;font-size:12px;line-height:1.4;text-align:right;
+  color:#aab2c1;font-size:12px;line-height:1.4;text-align:left;
   pointer-events:none;
 }
+
+#stats{
+  position:fixed;right:14px;bottom:12px;z-index:6;
+  min-width:200px;margin:0;padding:10px 12px;
+  border:1px solid rgba(255,255,255,.1);border-radius:10px;
+  background:rgba(10,12,16,.78);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  color:#c6cddb;font-family:var(--mono);font-size:11.5px;line-height:1.9;
+  pointer-events:none;white-space:nowrap;
+}
+#stats b{color:#f2f5fb;font-weight:600}
+#stats .dim{color:var(--faint)}
+
+#settings{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:20px}
+.settings-backdrop{position:absolute;inset:0;background:rgba(4,5,8,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.settings-card{
+  position:relative;width:min(420px,100%);
+  padding:22px 22px 16px;
+  border:1px solid var(--line);border-radius:20px;
+  background:
+    linear-gradient(155deg,rgba(255,255,255,.05),rgba(255,255,255,.015) 42%,rgba(255,255,255,.01)),
+    var(--surface);
+  box-shadow:0 32px 90px -30px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:card-in .35s cubic-bezier(.16,1,.3,1) both;
+}
+.settings-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.settings-head h2{margin:0;font-size:17px;font-weight:650;letter-spacing:-.01em}
+#settings-close{
+  width:32px;height:32px;border:0;border-radius:9px;
+  background:rgba(255,255,255,.06);color:var(--muted);
+  font-size:18px;line-height:1;cursor:pointer;
+  transition:background .15s,color .15s;
+}
+#settings-close:hover{background:rgba(255,255,255,.12);color:var(--text)}
+.setting-row{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 4px;border-top:1px solid var(--line);cursor:pointer;
+}
+.setting-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.setting-name{font-size:14px;font-weight:600}
+.setting-desc{font-size:12.5px;color:var(--muted);line-height:1.5;text-wrap:pretty}
+.setting-row input{position:absolute;opacity:0;pointer-events:none}
+.switch{
+  position:relative;flex:none;width:42px;height:24px;border-radius:999px;
+  background:rgba(255,255,255,.12);transition:background .2s;
+}
+.switch::after{
+  content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:#e9edf5;transition:transform .2s cubic-bezier(.16,1,.3,1);
+}
+.setting-row input:checked+.switch{background:var(--accent)}
+.setting-row input:checked+.switch::after{transform:translateX(18px)}
+.setting-row input:focus-visible+.switch{outline:2px solid var(--accent-strong);outline-offset:2px}
+.settings-foot{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);color:var(--faint);font-size:12px;text-align:center}
 
 @media (max-width:720px){
   .card{grid-template-columns:1fr;border-radius:20px}
@@ -175,7 +231,7 @@ h1 span{display:block}
 <section id="join">
   <main class="card">
     <div class="intro">
-      <div class="brand"><span class="mark" aria-hidden="true"></span><span>LAN Mirror</span></div>
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span>Mac Mirror</span></div>
       <h1><span>把 Mac 的扩展屏</span><span>投到这台设备</span></h1>
       <p class="lede">输入 Mac 管理页上的四位认证码，即可在这台设备上观看扩展屏。</p>
       <p class="note">只读投屏，不回传键鼠。仅一台设备。</p>
@@ -185,21 +241,57 @@ h1 span{display:block}
       <input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" placeholder="0000" aria-label="四位认证码">
       <button id="connect" type="button">连接</button>
       <p id="error" class="form-error" role="status" aria-live="polite"></p>
-      <p class="hint">认证码在 Mac 管理页上显示，服务每次启动都会更新。</p>
+      <p class="hint">认证码在 Mac 管理页上显示，服务每次启动都会更新。连接后按 S 键打开设置。</p>
     </div>
   </main>
 </section>
 <canvas id="screen" width="1920" height="1080"></canvas>
-<video id="display" autoplay muted playsinline hidden></video>
+<video id="keepalive" muted playsinline hidden></video>
 <p id="conn-status" role="status" hidden></p>
 <p id="wake-status" role="status" hidden></p>
+<div id="stats" hidden></div>
+<div id="settings" hidden>
+  <div class="settings-backdrop"></div>
+  <div class="settings-card" role="dialog" aria-modal="true" aria-label="设置">
+    <div class="settings-head"><h2>设置</h2><button id="settings-close" type="button" aria-label="关闭设置">&times;</button></div>
+    <label class="setting-row">
+      <span class="setting-text"><span class="setting-name">网络信息</span><span class="setting-desc">在画面右下角实时显示延迟、帧率、码率等传输状态</span></span>
+      <input type="checkbox" id="stats-toggle">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <label class="setting-row">
+      <span class="setting-text"><span class="setting-name">防息屏</span><span class="setting-desc">播放一个不可见的占位视频，防止观看时设备自动息屏；不影响画面延迟</span></span>
+      <input type="checkbox" id="keepalive-toggle">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <p class="settings-foot">按 S 或 Esc 关闭</p>
+  </div>
+</div>
 <script>
-const canvas=document.querySelector('#screen'),video=document.querySelector('#display'),codeInput=document.querySelector('#code'),connectButton=document.querySelector('#connect'),joinPanel=document.querySelector('#join'),error=document.querySelector('#error'),connStatus=document.querySelector('#conn-status'),wakeStatus=document.querySelector('#wake-status'),ctx=canvas.getContext('2d');
-const CODE_KEY='lan-mirror-code';
-let wakeLock=null,displayStream=null,wakeStatusTimer=null;
+const canvas=document.querySelector('#screen'),keepalive=document.querySelector('#keepalive'),codeInput=document.querySelector('#code'),connectButton=document.querySelector('#connect'),joinPanel=document.querySelector('#join'),error=document.querySelector('#error'),connStatus=document.querySelector('#conn-status'),wakeStatus=document.querySelector('#wake-status'),settings=document.querySelector('#settings'),statsToggle=document.querySelector('#stats-toggle'),keepaliveToggle=document.querySelector('#keepalive-toggle'),statsPanel=document.querySelector('#stats'),ctx=canvas.getContext('2d');
+const CODE_KEY='lan-mirror-code',STATS_KEY='lan-mirror-stats',KEEPALIVE_KEY='lan-mirror-keepalive';
+let wakeLock=null,wakeStatusTimer=null,keepAliveTimer=null,keepAliveFlip=false;
 let pendingFrame=null,decodingFrame=false;
 let ws=null,reconnectTimer=null,reconnectDelay=1000,takenOver=false;
+let clockOffset=null,statsTimer=null,pingTimer=null;
+let streamCodec='jpeg',videoDecoder=null,decoderConfigured=false,pendingVideoFrame=null,drawingVideo=false;
+let chunkTimeBase=null,parsedCodec=null; // 首帧 captureMs，chunk 时间戳以此为基准，避免过大的绝对时间戳
+const decodeSubmitTimes=[];
+const stats={frames:0,bytes:0,decodeMs:0,encodeMs:0,skipped:0,latency:null,rtt:null,serverDropped:0,res:'',lastSample:0};
 codeInput.value=localStorage.getItem(CODE_KEY)||'';
+// WebCodecs H.264 解码能力探测：支持则与服务端协商走 H.264，否则回退 JPEG。
+// 优先软解：硬件 VT 解码器会按流水线深度扣住 5-7 帧才输出（实测 30fps 下 ~200ms 延迟），
+// 软解（FFmpeg，realtime 模式单线程）逐帧即时输出，M 系列 CPU 解 4K30 只占约一个核。
+let clientCodec='jpeg',decoderHwAccel='prefer-software';
+const codecProbe=(async()=>{
+ if(!('VideoDecoder' in window))return;
+ try{
+  const soft=await VideoDecoder.isConfigSupported({codec:'avc1.640028',latencyMode:'realtime',hardwareAcceleration:'prefer-software'});
+  if(soft.supported){clientCodec='h264';return}
+  const hard=await VideoDecoder.isConfigSupported({codec:'avc1.640028',latencyMode:'realtime',hardwareAcceleration:'prefer-hardware'});
+  if(hard.supported){clientCodec='h264';decoderHwAccel='prefer-hardware'}
+ }catch{}
+})();
 function setBusy(busy){
  connectButton.disabled=busy;
  connectButton.textContent=busy?'正在连接…':'连接';
@@ -215,28 +307,156 @@ function showConnStatus(message){
  if(message){connStatus.textContent=message;connStatus.hidden=false}
  else connStatus.hidden=true;
 }
+function renderStats(){
+ const now=performance.now(),elapsed=stats.lastSample?now-stats.lastSample:0;
+ let fps=0,mbps=0,avgDecode=0,avgEncode=0;
+ if(elapsed>0){
+  fps=stats.frames*1000/elapsed;
+  mbps=stats.bytes*8*1000/elapsed/1e6;
+  if(stats.frames){avgDecode=stats.decodeMs/stats.frames;avgEncode=stats.encodeMs/stats.frames}
+  stats.frames=0;stats.bytes=0;stats.decodeMs=0;stats.encodeMs=0;
+ }
+ stats.lastSample=now;
+ statsPanel.innerHTML=
+  `延迟 <b>${stats.latency==null?'—':Math.max(0,Math.round(stats.latency))+' ms'}</b> <span class="dim">RTT ${stats.rtt==null?'—':Math.round(stats.rtt)+' ms'}</span><br>`+
+  `帧率 <b>${fps.toFixed(0)} fps</b> <span class="dim">${mbps.toFixed(1)} Mbps</span><br>`+
+  `编码 <b>${avgEncode.toFixed(0)} ms</b> <span class="dim">解码 ${avgDecode.toFixed(0)} ms</span><br>`+
+  `<span class="dim">${streamCodec==='h264'?'H.264':'JPEG'} · ${stats.res||'—'} · 跳帧 ${stats.skipped} · 队列 ${videoDecoder?.decodeQueueSize??'—'} · 服务端丢帧 ${stats.serverDropped}</span>`;
+}
+function setStatsEnabled(enabled){
+ statsToggle.checked=enabled;
+ localStorage.setItem(STATS_KEY,enabled?'1':'0');
+ statsPanel.hidden=!enabled;
+ clearInterval(statsTimer);clearInterval(pingTimer);
+ statsTimer=pingTimer=null;
+ if(enabled){
+  stats.lastSample=performance.now();clockOffset=null;
+  statsTimer=setInterval(renderStats,500);
+  const ping=()=>{if(ws?.readyState===1)ws.send(JSON.stringify({type:'ping',t:Date.now()}))};
+  ping();
+  pingTimer=setInterval(ping,1000);
+ }
+}
+// 防息屏：8x8 占位 canvas 每秒出 1 帧，喂给几乎不可见的 video 播放。
+// 浏览器只对"可见且正在播放的 video"保持屏幕唤醒，与内容无关；主画面始终 canvas 直渲，不加延迟。
+const keepAliveCanvas=document.createElement('canvas');
+keepAliveCanvas.width=keepAliveCanvas.height=8;
+const keepAliveCtx=keepAliveCanvas.getContext('2d');
+function setKeepAlive(on){
+ keepaliveToggle.checked=on;
+ localStorage.setItem(KEEPALIVE_KEY,on?'1':'0');
+ clearInterval(keepAliveTimer);keepAliveTimer=null;
+ if(on&&keepAliveCanvas.captureStream){
+  keepalive.hidden=false;
+  keepAliveCtx.fillStyle='#000';keepAliveCtx.fillRect(0,0,8,8);
+  if(!keepalive.srcObject)keepalive.srcObject=keepAliveCanvas.captureStream(1);
+  keepalive.play().catch(()=>{});
+  keepAliveTimer=setInterval(()=>{keepAliveCtx.fillStyle=(keepAliveFlip=!keepAliveFlip)?'#010102':'#000';keepAliveCtx.fillRect(0,0,8,8)},1000);
+ }else{
+  keepalive.pause();
+  keepalive.hidden=true;
+ }
+}
+function setSettingsOpen(open){
+ settings.hidden=!open;
+ if(open)document.querySelector('#settings-close').focus();
+}
+// JPEG 路径：只保留最新帧，过期帧直接丢弃
 async function drawLatestFrame(){
  if(decodingFrame||!pendingFrame)return;
  decodingFrame=true;
  try{
   while(pendingFrame){
    const frame=pendingFrame;pendingFrame=null;
-   const bitmap=await createImageBitmap(frame);
-   if(pendingFrame){bitmap.close();continue;}
-   if(canvas.width!==bitmap.width||canvas.height!==bitmap.height){canvas.width=bitmap.width;canvas.height=bitmap.height}
+   const decodeStart=performance.now();
+   const bitmap=await createImageBitmap(frame.blob);
+   const decodeMs=performance.now()-decodeStart;
+   if(pendingFrame){bitmap.close();stats.skipped+=1;continue}
+   if(canvas.width!==bitmap.width||canvas.height!==bitmap.height){canvas.width=bitmap.width;canvas.height=bitmap.height;stats.res=`${bitmap.width}×${bitmap.height}`}
    ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+   stats.frames+=1;stats.decodeMs+=decodeMs;stats.encodeMs+=frame.encodeMs;
+   if(clockOffset!=null)stats.latency=Date.now()+clockOffset-frame.captureMs;
   }
  }catch(error){console.error('Frame decode failed',error)}
  finally{decodingFrame=false;if(pendingFrame)drawLatestFrame()}
 }
+// H.264 路径：Annex B 裸流喂 VideoDecoder；首个关键帧里解析 SPS 得到精确的 codec 串
+function parseAvcCodec(payload){
+ const bytes=new Uint8Array(payload);
+ for(let i=0;i<bytes.length-4;i++){
+  if(bytes[i]===0&&bytes[i+1]===0&&(bytes[i+2]===1||(bytes[i+2]===0&&bytes[i+3]===1))){
+   const start=i+(bytes[i+2]===1?3:4);
+   if((bytes[start]&0x1f)===7){
+    const hex=n=>bytes[start+n].toString(16).padStart(2,'0');
+    return `avc1.${hex(1)}${hex(2)}${hex(3)}`;
+   }
+   i=start;
+  }
+ }
+ return 'avc1.640028';
+}
+function handleH264(captureMs,encodeMs,flags,payload){
+ stats.encodeMs+=encodeMs;
+ if(!videoDecoder)return;
+ if(!decoderConfigured){
+  if(!(flags&1))return; // 配置前只接受关键帧
+  parsedCodec=parseAvcCodec(payload);
+  videoDecoder.configure({codec:parsedCodec,optimizeForLatency:true,latencyMode:'realtime',hardwareAcceleration:decoderHwAccel});
+  decoderConfigured=true;
+ }
+ if(videoDecoder.state!=='configured')return;
+ if(chunkTimeBase==null)chunkTimeBase=captureMs;
+ decodeSubmitTimes.push(performance.now());
+ videoDecoder.decode(new EncodedVideoChunk({type:flags&1?'key':'delta',timestamp:(captureMs-chunkTimeBase)*1000,data:payload}));
+}
+function drawVideoFrame(){
+ if(drawingVideo||!pendingVideoFrame)return;
+ drawingVideo=true;
+ const frame=pendingVideoFrame;pendingVideoFrame=null;
+ try{
+  if(canvas.width!==frame.codedWidth||canvas.height!==frame.codedHeight){canvas.width=frame.codedWidth;canvas.height=frame.codedHeight;stats.res=`${frame.codedWidth}×${frame.codedHeight}`}
+  ctx.drawImage(frame,0,0,canvas.width,canvas.height);
+  stats.frames+=1;
+  if(clockOffset!=null)stats.latency=Date.now()+clockOffset-(frame.timestamp/1000+(chunkTimeBase??0));
+ }finally{frame.close();drawingVideo=false;if(pendingVideoFrame)drawVideoFrame()}
+}
+function resetDecoder(){
+ try{videoDecoder?.close()}catch{}
+ videoDecoder=null;decoderConfigured=false;chunkTimeBase=null;decodeSubmitTimes.length=0;
+ if(pendingVideoFrame){pendingVideoFrame.close();pendingVideoFrame=null}
+}
+function setupDecoder(){
+ resetDecoder();
+ videoDecoder=new VideoDecoder({
+  output:frame=>{
+   const submitted=decodeSubmitTimes.shift();
+   if(submitted!=null)stats.decodeMs+=performance.now()-submitted;
+   if(pendingVideoFrame)pendingVideoFrame.close();
+   pendingVideoFrame=frame;
+   drawVideoFrame();
+  },
+  error:e=>{
+   console.error('H264 decode failed',e);
+   // 软解不可用时（如无 FFmpeg H.264 的 Chromium 构建）回退硬解
+   if(decoderHwAccel==='prefer-software'){
+    decoderHwAccel='prefer-hardware';
+    setupDecoder();
+    return;
+   }
+   error.textContent='H.264 解码失败，请刷新页面重连';
+   joinPanel.hidden=false;
+  }
+ });
+}
 async function requestWakeLock(){
  if(document.visibilityState!=='visible')return;
- if(!navigator.wakeLock){showWakeStatus(location.protocol==='https:'?'此浏览器不支持屏幕常亮锁':'当前为 HTTP，浏览器无法启用屏幕常亮；需使用受信任证书的 HTTPS');return;}
+ if(!navigator.wakeLock){if(location.protocol!=='https:')showWakeStatus('HTTP 下无法启用屏幕常亮锁，已用占位视频防息屏');return;}
  try{wakeLock=await navigator.wakeLock.request('screen');showWakeStatus('屏幕常亮已启用');wakeLock.addEventListener('release',()=>{wakeLock=null;if(joinPanel.hidden&&document.visibilityState==='visible')requestWakeLock()})}
  catch(error){showWakeStatus(error.name==='NotAllowedError'?'浏览器或系统阻止了屏幕常亮':'无法启用屏幕常亮')}
 }
-function sendAuth(code){
- if(ws?.readyState===1)ws.send(JSON.stringify({type:'auth',code}));
+async function sendAuth(code){
+ await codecProbe;
+ if(ws?.readyState===1)ws.send(JSON.stringify({type:'auth',code,codec:clientCodec}));
 }
 function scheduleReconnect(){
  if(takenOver||reconnectTimer)return;
@@ -249,8 +469,9 @@ function scheduleReconnect(){
 }
 function connect(){
  takenOver=false;
+ resetDecoder();
  ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/socket`);
- ws.binaryType='blob';
+ ws.binaryType='arraybuffer';
  ws.onopen=()=>{
   const saved=localStorage.getItem(CODE_KEY);
   if(saved){setBusy(true);sendAuth(saved)}
@@ -258,6 +479,7 @@ function connect(){
  };
  ws.onclose=event=>{
   setBusy(false);
+  resetDecoder();
   if(event.code===4000){
    takenOver=false;
    clearTimeout(reconnectTimer);reconnectTimer=null;reconnectDelay=1000;
@@ -282,8 +504,27 @@ function connect(){
   scheduleReconnect();
  };
  ws.onmessage=event=>{
-  if(typeof event.data!=='string'){pendingFrame=event.data;drawLatestFrame();return}
+  if(typeof event.data!=='string'){
+   // 帧协议：[captureMs(8)][encodeMs(4)][flags(1)][payload]，大端
+   const view=new DataView(event.data);
+   const captureMs=Number(view.getBigUint64(0));
+   const encodeMs=view.getUint32(8);
+   const flags=view.getUint8(12);
+   const payload=event.data.slice(13);
+   stats.bytes+=payload.byteLength+13;
+   if(streamCodec==='h264')handleH264(captureMs,encodeMs,flags,payload);
+   else{pendingFrame={captureMs,encodeMs,blob:new Blob([payload])};drawLatestFrame()}
+   return;
+  }
   const message=JSON.parse(event.data);
+  if(message.type==='pong'){
+   // 假设往返对称：服务端时钟 ≈ 客户端时钟 + clockOffset
+   const rtt=Date.now()-message.t;
+   stats.rtt=rtt;
+   clockOffset=message.now-(message.t+rtt/2);
+   stats.serverDropped=message.dropped??0;
+   return;
+  }
   if(message.type==='auth'&&!message.ok){
    setBusy(false);
    localStorage.removeItem(CODE_KEY);
@@ -300,9 +541,9 @@ function connect(){
    error.textContent='';
    showConnStatus('');
    joinPanel.hidden=true;
-   video.hidden=false;
-   if(!displayStream&&canvas.captureStream){displayStream=canvas.captureStream(30);video.srcObject=displayStream}
-   video.play().catch(()=>{});
+   streamCodec=message.codec==='h264'?'h264':'jpeg';
+   if(streamCodec==='h264')setupDecoder();
+   setKeepAlive(keepaliveToggle.checked);
    requestWakeLock();
    return;
   }
@@ -330,10 +571,20 @@ codeInput.addEventListener('input',()=>{
 codeInput.addEventListener('keydown',event=>{if(event.key==='Enter')connectButton.click()});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&joinPanel.hidden)requestWakeLock()});
 document.addEventListener('keydown',event=>{
- if(event.key!=='Enter'||!joinPanel.hidden)return;
+ if(event.target===codeInput)return;
+ if(event.key==='s'||event.key==='S'){setSettingsOpen(settings.hidden);return;}
+ if(event.key==='Escape'&&!settings.hidden){setSettingsOpen(false);return;}
+ if(event.key!=='Enter'||!joinPanel.hidden||!settings.hidden)return;
  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
  else document.documentElement.requestFullscreen().catch(()=>{});
 });
+document.querySelector('#settings-close').onclick=()=>setSettingsOpen(false);
+settings.querySelector('.settings-backdrop').onclick=()=>setSettingsOpen(false);
+statsToggle.addEventListener('change',()=>setStatsEnabled(statsToggle.checked));
+keepaliveToggle.addEventListener('change',()=>setKeepAlive(keepaliveToggle.checked));
+statsToggle.checked=localStorage.getItem(STATS_KEY)==='1';
+keepaliveToggle.checked=localStorage.getItem(KEEPALIVE_KEY)!=='0';
+if(statsToggle.checked)setStatsEnabled(true);
 connect();
 </script>
 </body>

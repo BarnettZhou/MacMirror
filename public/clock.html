@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Clock</title>
+<style>
+html,body{margin:0;height:100%;background:#111;overflow:hidden}
+#t{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+   font:bold 120px/1 Menlo,monospace;color:#0f6;letter-spacing:2px}
+#bar{position:absolute;left:0;bottom:0;height:40px;background:#f30;width:0}
+</style>
+</head>
+<body>
+<div id="t"></div>
+<div id="bar"></div>
+<script>
+const t=document.getElementById('t'),bar=document.getElementById('bar');
+function tick(){
+ const d=new Date();
+ const p=n=>String(n).padStart(2,'0');
+ t.textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3,'0')}`;
+ bar.style.width=(d.getMilliseconds()/10)+'%';
+}
+setInterval(tick,16);tick();
+</script>
+</body>
+</html>

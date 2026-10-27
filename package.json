@@ -1,5 +1,5 @@
 {
-  "name": "lan-mirror",
+  "name": "mac-mirror",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.js", "test": "node --test" },

@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { createPairingCode } from './lib/pairing.js';
@@ -12,8 +13,6 @@ import { createPairingCode } from './lib/pairing.js';
 const PORT = Number(process.env.PORT || 8787);
 const HTTPS_KEY = process.env.HTTPS_KEY;
 const HTTPS_CERT = process.env.HTTPS_CERT;
-const DISPLAY_BACKEND = String(process.env.DISPLAY_BACKEND || 'virtualdisplay').toLowerCase();
-const BETTER_DISPLAY = process.env.BETTER_DISPLAY || '/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay';
 const VIRTUAL_DISPLAY_CTL_CANDIDATES = [
   '/Applications/VirtualDisplay.app/Contents/MacOS/vdctl',
   '/tmp/VirtualDisplay-derived-app/Build/Products/Debug/VirtualDisplay.app/Contents/MacOS/vdctl',
@@ -21,17 +20,37 @@ const VIRTUAL_DISPLAY_CTL_CANDIDATES = [
 const VIRTUAL_DISPLAY_CTL = process.env.VIRTUAL_DISPLAY_CTL
   || VIRTUAL_DISPLAY_CTL_CANDIDATES.find(existsSync)
   || VIRTUAL_DISPLAY_CTL_CANDIDATES[0];
+const derivedAppPath = resolve(dirname(VIRTUAL_DISPLAY_CTL), '../..');
+const VIRTUAL_DISPLAY_APP = process.env.VIRTUAL_DISPLAY_APP
+  || (derivedAppPath.endsWith('.app') ? derivedAppPath : '');
 const MIRROR_CAPTURE = fileURLToPath(new URL('./.build/debug/MirrorCapture', import.meta.url));
 const MIRROR_DISPLAY_CTL = fileURLToPath(new URL('./.build/debug/MirrorDisplayCtl', import.meta.url));
-const DISPLAY_NAME = DISPLAY_BACKEND === 'virtualdisplay' ? 'VirtualDisplay' : 'LANMirror';
-if (!['betterdisplay', 'virtualdisplay'].includes(DISPLAY_BACKEND)) {
-  throw new Error(`Unsupported DISPLAY_BACKEND: ${DISPLAY_BACKEND}. Use betterdisplay or virtualdisplay.`);
+const DISPLAY_NAME = 'VirtualDisplay';
+
+async function launchVirtualDisplayApp() {
+  if (process.platform !== 'darwin') return;
+  if (!VIRTUAL_DISPLAY_APP || !existsSync(VIRTUAL_DISPLAY_APP)) {
+    console.warn(`VirtualDisplay.app not found${VIRTUAL_DISPLAY_APP ? ` at ${VIRTUAL_DISPLAY_APP}` : ''}; install it or set VIRTUAL_DISPLAY_APP.`);
+    return;
+  }
+  const running = await new Promise(done => execFile('pgrep', ['-x', 'VirtualDisplay'], error => done(!error)));
+  if (running) {
+    console.log('VirtualDisplay.app is already running');
+    return;
+  }
+  await new Promise(done => execFile('open', ['-gj', VIRTUAL_DISPLAY_APP], error => {
+    if (error) console.error(`Could not launch VirtualDisplay.app: ${error.message}`);
+    else console.log(`VirtualDisplay.app launch requested: ${VIRTUAL_DISPLAY_APP}`);
+    done();
+  }));
 }
+launchVirtualDisplayApp().catch(error => console.error(`VirtualDisplay.app launch failed: ${error.message}`));
+
 let code = createPairingCode();
 const STREAM_QUALITIES = {
-  original: { quality: '0.72', maxPixelWidth: '0' },
-  balanced: { quality: '0.6', maxPixelWidth: '2560' },
-  smooth: { quality: '0.45', maxPixelWidth: '1920' },
+  original: { quality: '0.72', maxPixelWidth: '0', bitrate: '15000' },
+  balanced: { quality: '0.6', maxPixelWidth: '2560', bitrate: '8000' },
+  smooth: { quality: '0.45', maxPixelWidth: '1920', bitrate: '4000' },
 };
 let streamQuality = 'original';
 let active = null;
@@ -48,15 +67,6 @@ function vd(args) {
     return Promise.reject(new Error(`vdctl not found at ${VIRTUAL_DISPLAY_CTL}; install VirtualDisplay.app or set VIRTUAL_DISPLAY_CTL to its vdctl path`));
   }
   return runFile(VIRTUAL_DISPLAY_CTL, args);
-}
-function bd(args) {
-  return new Promise((resolve, reject) => execFile(BETTER_DISPLAY, args, { timeout: 10_000 }, (error, stdout, stderr) =>
-    error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
-}
-async function findBetterDisplay() {
-  const displays = parseJsonObjects(await bd(['get', '-identifiers']));
-  return displays.find(item => item.deviceType === 'VirtualScreen' && item.name === 'LANMirror')
-    ?? displays.find(item => item.deviceType === 'VirtualScreen' && item.name === 'LANMirrorTest');
 }
 async function virtualStatus() {
   const parsed = JSON.parse(await vd(['status']));
@@ -76,18 +86,7 @@ async function systemDisplayByName(name) {
   const pixels = String(row._spdisplays_pixels || '').match(/(\d+)\s*x\s*(\d+)/);
   return { name, displayID, connected: row.spdisplays_online === 'spdisplays_yes', resolution: resolution ? `${resolution[1]}x${resolution[2]}` : undefined, pixelWidth: pixels ? Number(pixels[1]) : undefined, pixelHeight: pixels ? Number(pixels[2]) : undefined };
 }
-function parseDisplayModes(output) {
-  return output.split(/\r?\n/).flatMap(line => {
-    const match = line.match(/^\s*(\d+)\s*-\s*(\d+)x(\d+)\b(.*)$/);
-    if (!match || /\bUnsafe\b/i.test(match[4])) return [];
-    return [{ mode: Number(match[1]), resolution: `${match[2]}x${match[3]}`, hiDPI: /\bHiDPI\b/i.test(match[4]), current: /\bCurrent\b/i.test(match[4]) }];
-  });
-}
-async function readBetterDisplayModes() {
-  return parseDisplayModes(await bd(['get', '-name=LANMirror', '-displayModeList']));
-}
 async function readDisplayModes() {
-  if (DISPLAY_BACKEND === 'betterdisplay') return readBetterDisplayModes();
   const presets = await virtualPresets();
   return presets.map(preset => ({
     presetID: preset.id,
@@ -98,25 +97,16 @@ async function readDisplayModes() {
     refreshRate: preset.refreshRate,
   }));
 }
-async function readDisplayMode() {
-  try { return (await readDisplayModes()).find(mode => mode.current) ?? null; } catch { return null; }
-}
-async function refreshBetterDisplay() {
-  const display = await findBetterDisplay();
-  if (!display) { virtualDisplay = null; return null; }
-  virtualDisplay = { backend: DISPLAY_BACKEND, name: display.name, displayID: display.displayID, UUID: display.UUID, tagID: display.tagID, connected: Boolean(display.displayID && display.displayID !== '0'), ...(await readDisplayMode() ?? {}) };
-  return virtualDisplay;
-}
 async function refreshVirtualDisplay() {
   const status = await virtualStatus();
   const systemDisplay = await systemDisplayByName(DISPLAY_NAME).catch(() => null);
   if (!status) { virtualDisplay = null; return null; }
   // 分辨率以 vdctl status 里的实际 CG 模式为准（预设 activate 不会改变当前模式）
-  virtualDisplay = { backend: DISPLAY_BACKEND, name: DISPLAY_NAME, displayID: systemDisplay?.displayID, connected: Boolean(status.online && systemDisplay?.displayID != null), resolution: `${status.logicalWidth}x${status.logicalHeight}`, physicalResolution: `${status.physicalWidth}x${status.physicalHeight}`, hiDPI: true, refreshRate: status.refreshRate, presetID: status.currentPresetID ?? undefined };
+  virtualDisplay = { backend: 'virtualdisplay', name: DISPLAY_NAME, displayID: systemDisplay?.displayID, connected: Boolean(status.online && systemDisplay?.displayID != null), resolution: `${status.logicalWidth}x${status.logicalHeight}`, physicalResolution: `${status.physicalWidth}x${status.physicalHeight}`, hiDPI: true, refreshRate: status.refreshRate, presetID: status.currentPresetID ?? undefined };
   return virtualDisplay;
 }
 async function refreshDisplay() {
-  return DISPLAY_BACKEND === 'betterdisplay' ? refreshBetterDisplay() : refreshVirtualDisplay();
+  return refreshVirtualDisplay();
 }
 async function ensureDisplay() {
   if (virtualDisplay?.connected) {
@@ -126,56 +116,33 @@ async function ensureDisplay() {
     virtualDisplay = null;
   }
   try {
-    if (DISPLAY_BACKEND === 'virtualdisplay') {
-      let status = await virtualStatus();
-      if (!status) {
-        await vd(['add', 'display', DISPLAY_NAME]);
-        status = await virtualStatus();
-      }
-      if (!status) throw new Error('VirtualDisplay 中没有名为 VirtualDisplay 的显示器');
-      if (!status.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
-      // CGVirtualDisplay 在本机需要数秒到十余秒才会被 WindowServer 上线；若 App 持有的是
-      // WindowServer 重启前的失效对象，开关一次强制其重建。
-      let forcedRecreate = false;
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const current = await refreshVirtualDisplay();
-        if (current?.connected) return current;
-        if (!forcedRecreate && attempt === 11) {
-          forcedRecreate = true;
-          const latest = await virtualStatus();
-          if (latest?.enabled) {
-            await vd(['toggle', 'display', DISPLAY_NAME]).catch(() => {});
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            await vd(['toggle', 'display', DISPLAY_NAME]).catch(() => {});
-          }
+    let status = await virtualStatus();
+    if (!status) {
+      await vd(['add', 'display', DISPLAY_NAME]);
+      status = await virtualStatus();
+    }
+    if (!status) throw new Error('VirtualDisplay 中没有名为 VirtualDisplay 的显示器');
+    if (!status.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
+    // CGVirtualDisplay 在本机需要数秒到十余秒才会被 WindowServer 上线；若 App 持有的是
+    // WindowServer 重启前的失效对象，开关一次强制其重建。
+    let forcedRecreate = false;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const current = await refreshVirtualDisplay();
+      if (current?.connected) return current;
+      if (!forcedRecreate && attempt === 11) {
+        forcedRecreate = true;
+        const latest = await virtualStatus();
+        if (latest?.enabled) {
+          await vd(['toggle', 'display', DISPLAY_NAME]).catch(() => {});
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          await vd(['toggle', 'display', DISPLAY_NAME]).catch(() => {});
         }
       }
-      throw new Error('VirtualDisplay 未上线或没有可用的 macOS display ID');
     }
-    let display = await findBetterDisplay();
-    if (!display) {
-      await bd(['create', '-deviceType=virtualScreen', '-virtualScreenName=LANMirror', '-aspectWidth=16', '-aspectHeight=9', '-useResolutionList=on', '-resolutionList=1280x720,1600x900,1920x1080', '-virtualScreenHiDPI=on']);
-      display = await findBetterDisplay();
-      if (!display) throw new Error('BetterDisplay did not create LANMirror');
-    }
-    const selectedTag = display.tagID;
-    if (!display.displayID || display.displayID === '0') {
-      await bd(['set', '-name=LANMirror', '-connected=on']);
-      for (let attempt = 0; attempt < 12; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, 250));
-        display = await findBetterDisplay();
-        if (display?.tagID === selectedTag && display.displayID && display.displayID !== '0') break;
-      }
-    }
-    if (!display?.displayID || display.displayID === '0') throw new Error('LANMirror has no active macOS display ID');
-    const displays = parseJsonObjects(await bd(['get', '-identifiers']));
-    for (const duplicate of displays.filter(item => item.deviceType === 'VirtualScreen' && ['LANMirror', 'LANMirrorTest'].includes(item.name) && item.tagID !== display.tagID)) {
-      await bd(['discard', `-tagID=${duplicate.tagID}`]).catch(error => console.error(`Could not discard duplicate LANMirror ${duplicate.tagID}: ${error.message}`));
-    }
-    return await refreshBetterDisplay();
+    throw new Error('VirtualDisplay 未上线或没有可用的 macOS display ID');
   } catch (error) {
-    console.error(`${DISPLAY_BACKEND} unavailable: ${error.message}`);
+    console.error(`VirtualDisplay unavailable: ${error.message}`);
     return null;
   }
 }
@@ -217,7 +184,7 @@ function probeDisplay(displayID) {
 // 看门狗：CGVirtualDisplay 被重建后旧 displayID 失效，但采集进程不会报错也不会退出，
 // 只是静默停帧。定期探测 displayID 是否还在线，失效则重启采集。
 function startDisplayWatchdog() {
-  if (displayWatchdog || DISPLAY_BACKEND !== 'virtualdisplay') return;
+  if (displayWatchdog) return;
   displayWatchdog = setInterval(async () => {
     if (!active?.authenticated || !captureProcess || !virtualDisplay?.displayID) return;
     if (await probeDisplay(virtualDisplay.displayID)) return;
@@ -240,12 +207,8 @@ async function configureDisplay(settings) {
   }
   if (connected === false) {
     await stopCapture();
-    if (DISPLAY_BACKEND === 'betterdisplay') {
-      await bd(['set', '-name=LANMirror', '-connected=off']);
-    } else {
-      const status = await virtualStatus();
-      if (status?.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
-    }
+    const status = await virtualStatus();
+    if (status?.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
     active?.socket.close(4000, 'Virtual display disabled by administrator');
     active = null;
     return await refreshDisplay();
@@ -259,35 +222,29 @@ async function configureDisplay(settings) {
   await stopCapture();
   try {
     if (connected === true && !wasConnected) {
-      if (DISPLAY_BACKEND === 'betterdisplay') await bd(['set', '-name=LANMirror', '-connected=on']);
-      else {
-        const status = await virtualStatus();
-        if (status && !status.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
-      }
+      const status = await virtualStatus();
+      if (status && !status.enabled) await vd(['toggle', 'display', DISPLAY_NAME]);
     }
     let requestedMode;
     if (resolution !== undefined) {
       const modes = await readDisplayModes();
       requestedMode = modes.find(item => item.resolution === resolution && item.hiDPI) ?? modes.find(item => item.resolution === resolution);
-      if (!requestedMode) throw new Error(`${DISPLAY_BACKEND} has no display mode for ${resolution}`);
-      if (DISPLAY_BACKEND === 'betterdisplay') await bd(['set', '-name=LANMirror', `-displayModeNumber=${requestedMode.mode}`]);
-      else {
-        // vdctl activate preset 只改变 CGVirtualDisplay 的模式列表，不会切换 macOS 当前模式；
-        // 等 App 应用列表后，用 MirrorDisplayCtl 强制切换当前模式。
-        await vd(['activate', 'preset', DISPLAY_NAME, requestedMode.presetID]);
-        let applied = false;
-        let lastError = null;
-        for (let attempt = 0; attempt < 10 && !applied; attempt += 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const current = await refreshVirtualDisplay().catch(() => null);
-          if (!current?.displayID) continue;
-          try {
-            await runFile(MIRROR_DISPLAY_CTL, ['set', String(current.displayID), resolution]);
-            applied = true;
-          } catch (error) { lastError = error; }
-        }
-        if (!applied) throw new Error(`无法切换到 ${resolution}：${lastError?.message ?? '显示器未就绪'}`);
+      if (!requestedMode) throw new Error(`VirtualDisplay has no display mode for ${resolution}`);
+      // vdctl activate preset 只改变 CGVirtualDisplay 的模式列表，不会切换 macOS 当前模式；
+      // 等 App 应用列表后，用 MirrorDisplayCtl 强制切换当前模式。
+      await vd(['activate', 'preset', DISPLAY_NAME, requestedMode.presetID]);
+      let applied = false;
+      let lastError = null;
+      for (let attempt = 0; attempt < 10 && !applied; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const current = await refreshVirtualDisplay().catch(() => null);
+        if (!current?.displayID) continue;
+        try {
+          await runFile(MIRROR_DISPLAY_CTL, ['set', String(current.displayID), resolution]);
+          applied = true;
+        } catch (error) { lastError = error; }
       }
+      if (!applied) throw new Error(`无法切换到 ${resolution}：${lastError?.message ?? '显示器未就绪'}`);
     }
     virtualDisplay = null;
     let updated = connected === true ? await ensureDisplay() : await refreshDisplay();
@@ -297,7 +254,7 @@ async function configureDisplay(settings) {
         updated = await refreshDisplay();
       }
       if (updated?.resolution !== resolution || (requestedMode?.hiDPI && !updated?.hiDPI)) {
-        throw new Error(`${DISPLAY_BACKEND} did not apply ${resolution}; current mode is ${updated?.resolution ?? 'unknown'}`);
+        throw new Error(`VirtualDisplay did not apply ${resolution}; current mode is ${updated?.resolution ?? 'unknown'}`);
       }
     }
     if (shouldCapture && updated?.connected) startCapture();
@@ -309,36 +266,26 @@ async function configureDisplay(settings) {
     throw error;
   }
 }
-function parseJsonObjects(text) {
-  const objects = [];
-  let start = -1, depth = 0, inString = false, escaped = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    if (inString) { if (escaped) escaped = false; else if (char === '\\') escaped = true; else if (char === '"') inString = false; continue; }
-    if (char === '"') { inString = true; continue; }
-    if (char === '{') { if (depth === 0) start = i; depth += 1; }
-    if (char === '}' && depth > 0 && --depth === 0) { try { objects.push(JSON.parse(text.slice(start, i + 1))); } catch {} }
-  }
-  return objects;
-}
 function startCapture() {
   if (!virtualDisplay?.displayID || captureProcess) return;
   const preset = STREAM_QUALITIES[streamQuality] ?? STREAM_QUALITIES.original;
-  const child = spawn(MIRROR_CAPTURE, [String(virtualDisplay.displayID), preset.quality, preset.maxPixelWidth], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const codec = active?.codec ?? 'jpeg';
+  const child = spawn(MIRROR_CAPTURE, [String(virtualDisplay.displayID), preset.quality, preset.maxPixelWidth, codec, preset.bitrate], { stdio: ['ignore', 'pipe', 'pipe'] });
   captureProcess = child;
   child.on('error', error => { console.error(`Capture helper failed: ${error.message}`); active?.socket.send(JSON.stringify({ type: 'capture-error', message: error.message })); });
   let pending = Buffer.alloc(0);
   child.stdout.on('data', chunk => {
     pending = Buffer.concat([pending, chunk]);
+    // 帧协议：[payloadLength(4)][captureMs(8)][encodeMs(4)][flags(1)][payload]，转发时剥掉长度前缀
     while (pending.length >= 4) {
       const size = pending.readUInt32BE(0);
       if (size === 0 || size > 16 * 1024 * 1024) {
         pending = pending.subarray(4);
         continue;
       }
-      if (pending.length < size + 4) break;
-      const frame = pending.subarray(4, size + 4);
-      pending = pending.subarray(size + 4);
+      if (pending.length < size + 17) break;
+      const frame = pending.subarray(4, size + 17);
+      pending = pending.subarray(size + 17);
       if (!active?.authenticated || active.socket.readyState !== 1) continue;
       // Bound latency: do not enqueue more frames while the network/client is behind.
       if (active.socket.bufferedAmount > Math.max(frame.length * 2, 512 * 1024)) {
@@ -353,7 +300,8 @@ function startCapture() {
   child.stderr.on('data', chunk => {
     const message = chunk.toString().trim();
     console.error(message);
-    if (message) active?.socket.send(JSON.stringify({ type: 'capture-error', message }));
+    // 每 300 帧的编码统计是常规日志，不是错误，不推给客户端
+    if (message && !/^MirrorCapture: \d+ frames/.test(message)) active?.socket.send(JSON.stringify({ type: 'capture-error', message }));
   });
   child.on('close', () => {
     if (captureProcess === child) captureProcess = null;
@@ -370,11 +318,9 @@ const requestHandler = async (req, res) => {
     if (!virtualDisplay) await refreshDisplay().catch(() => {});
     let resolutions = RESOLUTIONS;
     let backendError = null;
-    if (DISPLAY_BACKEND === 'virtualdisplay') {
-      try { resolutions = (await readDisplayModes()).map(mode => mode.resolution); }
-      catch (error) { resolutions = []; backendError = error.message; }
-    }
-    return json(res, { code, backend: DISPLAY_BACKEND, backendError, connected: !!active, device: active?.device ?? null, droppedFrames: active?.droppedFrames ?? 0, virtualDisplay, resolutions, streamQuality });
+    try { resolutions = (await readDisplayModes()).map(mode => mode.resolution); }
+    catch (error) { resolutions = []; backendError = error.message; }
+    return json(res, { code, backend: 'virtualdisplay', backendError, connected: !!active, device: active?.device ?? null, droppedFrames: active?.droppedFrames ?? 0, virtualDisplay, resolutions, streamQuality });
   }
   if (req.url === '/api/display' && req.method === 'POST') {
     try {
@@ -395,7 +341,7 @@ const requestHandler = async (req, res) => {
     }
     return json(res, { ok: true, code });
   }
-  const file = req.url === '/client' ? 'client.html' : 'admin.html';
+  const file = req.url === '/client' ? 'client.html' : req.url === '/clock.html' ? 'clock.html' : 'admin.html';
   try { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(await readFile(new URL(`./public/${file}`, import.meta.url))); }
   catch { res.writeHead(404); res.end('Not found'); }
 };
@@ -410,19 +356,24 @@ wss.on('connection', (socket, req) => {
   socket.on('pong', () => { socket.isAlive = true; });
   pending.add(socket);
   socket.on('message', async raw => {
-    if (active?.socket === socket) return;
     let message; try { message = JSON.parse(raw); } catch { return socket.close(4002, 'Invalid message'); }
+    // 时钟校准/RTT 探测：回显客户端时间并附上服务端时间，客户端据此估算两端时钟差
+    if (message.type === 'ping') {
+      return socket.send(JSON.stringify({ type: 'pong', t: message.t, now: Date.now(), dropped: active?.socket === socket ? active.droppedFrames ?? 0 : 0 }));
+    }
+    if (active?.socket === socket) return;
     if (message.type !== 'auth' || message.code !== code) return socket.send(JSON.stringify({ type: 'auth', ok: false }));
     pending.delete(socket);
     // 新客户端认证成功后接管会话：旧连接（如刷新前的残留 socket）被顶掉。
     const previous = active;
-    active = { socket, authenticated: true, device: { address: req.socket.remoteAddress, connectedAt: new Date().toISOString() } };
+    // 客户端上报的编码能力：h264（WebCodecs 硬解）或 jpeg（兜底）
+    active = { socket, authenticated: true, codec: message.codec === 'h264' ? 'h264' : 'jpeg', device: { address: req.socket.remoteAddress, connectedAt: new Date().toISOString() } };
     if (previous) previous.socket.close(4001, 'Another device took over');
     const display = await ensureDisplay();
     if (active?.socket !== socket) return;
-    if (!display) return socket.send(JSON.stringify({ type: 'auth', ok: true, display: null, error: `${DISPLAY_BACKEND} 虚拟屏不可用，请检查服务端日志。` }));
+    if (!display) return socket.send(JSON.stringify({ type: 'auth', ok: true, display: null, error: '虚拟屏不可用，请检查服务端日志。' }));
     startCapture();
-    return socket.send(JSON.stringify({ type: 'auth', ok: true, display }));
+    return socket.send(JSON.stringify({ type: 'auth', ok: true, display, codec: active.codec }));
   });
   socket.on('close', () => {
     pending.delete(socket);
@@ -444,8 +395,7 @@ const heartbeat = setInterval(() => {
 wss.on('close', () => clearInterval(heartbeat));
 server.listen(PORT, '0.0.0.0', () => {
   const protocol = useHttps ? 'https' : 'http';
-  console.log(`LAN Mirror: ${protocol}://localhost:${PORT}  pairing code: ${code}`);
-  console.log(`Display backend: ${DISPLAY_BACKEND}`);
+  console.log(`Mac Mirror: ${protocol}://localhost:${PORT}  pairing code: ${code}`);
   if (useHttps) console.log('Wake Lock can work when the client browser trusts the certificate.');
   // 清掉上次运行遗留的采集进程：孤儿 SCK 流挂在显示器上时，切换显示模式会拖垮整个采集管线
   execFile('pkill', ['-x', 'MirrorCapture'], () => {});
